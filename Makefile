@@ -2,6 +2,8 @@ DESTDIR =
 PREFIX  =/usr/local
 all:
 install:
+	mkdir -p $(DESTDIR)$(PREFIX)/share/sh-memegen
+	cp share/sh-memegen/* $(DESTDIR)$(PREFIX)/share/sh-memegen
 clean:
 test:
 	./bin/memegen                   \
