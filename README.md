@@ -17,6 +17,7 @@ The usual `sudo make install`.
 
 - More options for text sizes.
 - Better text positioning.
+- New images for the store.
 
 ## Help
 
