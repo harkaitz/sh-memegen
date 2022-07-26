@@ -1,0 +1,149 @@
+#!/bin/sh -e
+#L:
+#L:  MIT License
+#L:  
+#l:  Bug reports, feature requests to gemini|https://harkadev.com/oss
+#l:  Copyright (c) 2022 Harkaitz Agirre, harkaitz.aguirre@gmail.com
+#L:
+#L:  Permission is hereby granted, free of charge, to any person obtaining
+#L:  a copy of this software and associated documentation files (the
+#L:  "Software"), to deal in the Software without restriction, including
+#L:  without limitation the rights to use, copy, modify, merge, publish,
+#L:  distribute, sublicense, and/or sell copies of the Software, and to
+#L:  permit persons to whom the Software is furnished to do so, subject to
+#L:  the following conditions:
+#L:
+#L:  The above copyright notice and this permission notice shall be
+#L:  included in all copies or substantial portions of the Software.
+#L:
+#L:  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+#L:  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+#L:  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+#L:  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+#L:  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+#L:  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+#L:  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+##:
+#h: Usage: $0 [-i IMAGE] [-t TOP-TEXT] [-b TOP-TEXT] [-o FILE]
+#h:
+#h: Create memes efficiantly from the command line using ImageMagick's
+#h: convert(1).
+#h:
+#h: -i IMAGE-FILE  : Use this image file.
+#h: -i IMAGE-NAME  : Use this image from store.
+#h: -i l[ist]      : List store images.
+#h: -i n[sxiv]     : Select a store image using nsxiv(1).
+#h:
+#h: -t TOP-TEXT    : Put text on the top (can be specified twice).
+#h: -b BOTTOM-TEXT : Put text on the bottom (can be specified twice).
+#h:
+#h: -o FILENAME    : Output filename (by default a temporary file)
+#h:
+##:
+memegen() {
+    ## Check dependencies.
+    if ! which convert >/dev/null 2>&1; then
+        error "convert: Command not found, please install ImageMagick."
+        return 1
+    fi
+    if ! which mktemp >/dev/null 2>&1; then
+        error "mktemp: Command not found."
+        return 1
+    fi
+    ## Parse command line arguments.
+    local OPTIND optopt='' opt_i='' t1='' t2='' b1='' b2='' out=''
+    while getopts "i:t:b:o:" optopt; do
+        case $optopt in
+            i)  opt_i="${OPTARG}";;
+            t)  if test ! -n "${t1}"; then
+                    t1="${OPTARG}"
+                elif test ! -n "${t2}"; then
+                    t2="${OPTARG}"
+                fi;;
+            b)  if test ! -n "${b2}"; then
+                    b2="${OPTARG}"
+                elif test ! -n "${b1}"; then
+                    b1="${b2}"
+                    b2="${OPTARG}"
+                fi;;
+            o)  out="${OPTARG}";;
+            \?) return 1;;
+        esac
+    done
+    shift $(( OPTIND - 1 ))
+    ## Select image.
+    case "${opt_i}" in
+        '')      error "Please specify an image with -i."; return 1;;
+        l|list)  memegen_list_images; return 0;;
+        n|nsxiv) opt_i="$(memegen_select_image)"; test -n "${opt_i}";;
+        *)       opt_i="$(memegen_locate_image "${opt_i}")"; test -n "${opt_i}";;
+    esac
+    ## Specify at least one text.
+    if test ! -n "${t1}${t2}${b1}${b2}"; then
+        error "Please specify at least a text with -t/-b."
+        return 1
+    fi
+    ## Get output filename.
+    if test ! -n "${out}"; then
+        out="$(mktemp -u --suffix=.jpg)"
+    fi
+    ## Generate the file.
+    convert \
+        -resize    600 \
+        -pointsize 40  \
+        -stretch   ExtraCondensed \
+        -weight    bold \
+        -gravity   south \
+        ${b1:+ -fill black -annotate +3+83 "${b1}" } \
+	${b1:+ -fill white -annotate +0+80 "${b1}" } \
+	${b2:+ -fill black -annotate +3+43 "${b2}" } \
+	${b2:+ -fill white -annotate +0+40 "${b2}" } \
+	-gravity north                               \
+	${t2:+ -fill black -annotate +3+77 "${t2}" } \
+	${t2:+ -fill white -annotate +0+80 "${t2}" } \
+	${t1:+ -fill black -annotate +3+37 "${t1}" } \
+	${t1:+ -fill white -annotate +0+40 "${t1}" } \
+        "${opt_i}" \
+        "${out}"
+    echo "${out}"
+}
+memegen_list_images() {
+    find "${MEMEDIR}" -type f -exec basename '{}' '.jpg' ';'
+}
+memegen_select_image() {
+    local ign=''
+    if ! which nsxiv >/dev/null 2>&1; then
+        error "nsxiv: Command not found."
+        return 1
+    fi
+    echo "Select an image with 'right click', then quit with 'q'." >&2
+    echo "Type enter"                                              >&2
+    read -r ign; : "${ign}"
+    find "${MEMEDIR}" -type f | nsxiv -f -N memegen -i -o -q -t | head -n 1
+}
+memegen_locate_image() {
+    if test -f "${1}"; then
+        echo "${1}"
+    elif test -f "${MEMEDIR}/${1}.jpg"; then
+        echo "${MEMEDIR}/${1}.jpg"
+    else
+        error "Image '${1}' not found."
+    fi
+}
+error() {
+    echo "${SCRNAME}: error: $*" >&2
+}
+SCRNAME="$(basename "$0")"
+MEMEDIR="$(dirname "$0")/../share/sh-memegen"
+if test @"${SCRNAME}" = @"memegen";then
+    case "${1}" in
+        ''|-h|--help)
+            sed -n 's/^ *#h: \{0,1\}//p' "$0" | sed "s|\\\$0|${SCRNAME}|g"
+            echo ""
+            sed -n 's/^ *#l: \{0,2\}//p' "$0"
+            ;;
+        *)
+            memegen "$@"
+            ;;
+    esac
+fi
